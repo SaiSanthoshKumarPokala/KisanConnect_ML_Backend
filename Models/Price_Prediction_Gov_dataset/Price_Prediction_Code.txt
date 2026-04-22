@@ -1,0 +1,125 @@
+import pandas as pd
+import numpy as np
+import joblib
+import gc
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
+from category_encoders import TargetEncoder
+from xgboost import XGBRegressor
+
+# ==========================================
+# 1. CONFIGURATION
+# ==========================================
+DATA_PATH = '/kaggle/input/datasets/drvssiddarth/price-gov-data-5yrs/commodity-wise-report-for-last-5-years.csv'
+MODEL_FILENAME = 'crop_price_xgboost_2026.joblib'
+
+# ==========================================
+# 2. DATA LOADING & ENGINEERING
+# ==========================================
+print("📥 Loading and shrinking 2.5GB dataset...")
+use_cols = ['report_date', 'state_code', 'district_code', 'market_code', 
+            'commodity', 'variety', 'arrivals_tonnes', 'modal_price']
+
+# Load data and parse dates immediately
+df = pd.read_csv(DATA_PATH, usecols=use_cols, parse_dates=['report_date'])
+
+# Engineer time features (Crucial for current 2026 predictions)
+df['year'] = df['report_date'].dt.year.astype('int16')
+df['month'] = df['report_date'].dt.month.astype('int8')
+df['day_of_week'] = df['report_date'].dt.dayofweek.astype('int8')
+df.drop(columns=['report_date'], inplace=True)
+
+# Downcast to save RAM
+df['arrivals_tonnes'] = df['arrivals_tonnes'].astype('float32')
+df['modal_price'] = df['modal_price'].astype('float32')
+
+# ==========================================
+# 3. PREPROCESSING (TARGET ENCODING)
+# ==========================================
+print("🔄 Encoding categorical features...")
+X = df.drop('modal_price', axis=1)
+y = df['modal_price']
+
+# Target encoding handles high-cardinality text columns without exploding RAM
+cat_cols = ['commodity', 'variety']
+encoder = TargetEncoder(cols=cat_cols)
+X_encoded = encoder.fit_transform(X, y)
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.2, random_state=42)
+
+# Save feature names and free up memory
+feature_names = X_encoded.columns.tolist()
+del df, X, X_encoded
+gc.collect()
+
+# ==========================================
+# 4. MODEL TRAINING
+# ==========================================
+print("🧠 Training XGBoost Model (this will take a few minutes)...")
+model = XGBRegressor(
+    n_estimators=300,        # Number of trees
+    learning_rate=0.05,      # Slower learning rate for better accuracy
+    max_depth=10,            # Deep enough to catch complex interactions
+    tree_method='hist',      # Mandatory for 15M rows!
+    device="cpu",            # Change to "cuda" if Kaggle GPU is turned on
+    random_state=42,
+    n_jobs=-1
+)
+
+model.fit(X_train, y_train)
+
+# ==========================================
+# 5. EVALUATION
+# ==========================================
+print("📊 Evaluating Model...")
+preds = model.predict(X_test)
+mae = mean_absolute_error(y_test, preds)
+r2 = r2_score(y_test, preds)
+
+print("-" * 30)
+print(f"✅ Mean Absolute Error (MAE): ₹{mae:.2f}")
+print(f"✅ R-Squared (R2): {r2:.4f}")
+print("-" * 30)
+
+# ==========================================
+# 6. SERIALIZATION (SAVING)
+# ==========================================
+print(f"💾 Saving model and encoder to {MODEL_FILENAME}...")
+pipeline = {
+    'model': model,
+    'encoder': encoder,
+    'features': feature_names
+}
+joblib.dump(pipeline, MODEL_FILENAME, compress=3)
+print("🎉 Pipeline successfully saved!")
+
+# ==========================================
+# 7. QUICK TEST FOR 2026
+# ==========================================
+print("\n🔮 Testing 2026 Prediction using saved file...")
+
+def test_prediction():
+    # Load the newly saved file
+    saved_pipeline = joblib.load(MODEL_FILENAME)
+    
+    # Create a dummy row for today (Feb 2026)
+    test_input = pd.DataFrame([{
+        'state_code': 32,             # E.g., Kerala
+        'district_code': 554,         # E.g., Alappuzha
+        'market_code': 10926,
+        'commodity': 'Amphophalus',   # Must match a commodity in your data
+        'variety': 'Other',
+        'arrivals_tonnes': 2.0,
+        'year': 2026,
+        'month': 2,
+        'day_of_week': 5              # Saturday
+    }])
+    
+    # Transform and Predict
+    encoded_input = saved_pipeline['encoder'].transform(test_input)
+    prediction = saved_pipeline['model'].predict(encoded_input)[0]
+    
+    print(f"Predicted Price for 2.0 Tonnes of Amphophalus in Feb 2026: ₹{prediction:.2f}")
+
+test_prediction()

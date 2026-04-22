@@ -1,0 +1,53 @@
+import os
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+
+# 1. VERIFY AND LOAD DATA
+csv_path = '/kaggle/input/datasets/atharvaingle/crop-recommendation-dataset/Crop_recommendation.csv'
+
+if not os.path.exists(csv_path):
+    print(f"❌ ERROR: Cannot find the dataset at: {csv_path}")
+    print("👉 Please look at the 'Data' / 'Input' folder on the right sidebar of your Kaggle notebook.")
+    print("👉 Find the 'Crop_recommendation.csv' file, click the three dots (...), select 'Copy file path', and replace the csv_path variable above.")
+else:
+    print("✅ Dataset found! Loading data...")
+    df = pd.read_csv(csv_path)
+
+    # 2. ENCODING
+    crop_encoder = LabelEncoder()
+    df['label_encoded'] = crop_encoder.fit_transform(df['label'])
+
+    # 3. FEATURE SELECTION (Exactly 7 Features)
+    feature_cols = ['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall']
+
+    X = df[feature_cols].values.astype(np.float32)
+    y = df['label_encoded'].values
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # 4. TRAIN MODEL
+    print("🌾 Training High-Accuracy Random Forest...")
+    model = RandomForestClassifier(n_estimators=100, max_depth=15, random_state=42)
+    model.fit(X_train, y_train)
+
+    accuracy = model.score(X_test, y_test)
+    print(f"🎯 Model Accuracy: {accuracy * 100:.2f}%")
+
+    # 5. EXPORT TO ONNX
+    print("📦 Exporting model to ONNX format...")
+    initial_type = [('float_input', FloatTensorType([None, 7]))]
+    onnx_model = convert_sklearn(model, initial_types=initial_type)
+
+    with open("crop_recommender.onnx", "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    print("🚀 Success! Model saved as 'crop_recommender.onnx'")
+
+    # Generate the Crop Mapping for FastAPI
+    crop_dict = dict(zip(crop_encoder.transform(crop_encoder.classes_), crop_encoder.classes_))
+    crop_dict = {int(k): v for k, v in crop_dict.items()}
+    print(f"\n📋 CROP_MAPPING = {crop_dict}")

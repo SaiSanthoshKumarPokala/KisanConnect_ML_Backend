@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice AI Support Assistant</title>
+    <style>
+      :root {
+        --bg: #07130a;
+        --panel: rgba(8, 15, 9, 0.9);
+        --gold: #d4af37;
+        --gold-soft: #fff085;
+        --text: #f7f7f7;
+        --muted: rgba(255, 255, 255, 0.68);
+        --border: rgba(212, 175, 55, 0.22);
+        --card: rgba(255, 255, 255, 0.05);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(212, 175, 55, 0.18), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(255, 240, 133, 0.12), transparent 20%),
+          linear-gradient(180deg, #0a170d 0%, #050805 100%);
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      }
+
+      .shell {
+        width: min(960px, 100%);
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero,
+      .panel {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(12px);
+      }
+
+      .hero {
+        border-radius: 28px;
+        padding: 28px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 12px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--gold-soft);
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1.05;
+      }
+
+      .sub {
+        margin: 12px 0 0;
+        max-width: 740px;
+        color: var(--muted);
+        line-height: 1.7;
+        font-size: 1rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.25fr 0.85fr;
+        gap: 18px;
+      }
+
+      .panel {
+        border-radius: 24px;
+        padding: 20px;
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 1.1rem;
+      }
+
+      .log {
+        min-height: 360px;
+        max-height: 480px;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-right: 6px;
+      }
+
+      .bubble {
+        max-width: 86%;
+        padding: 14px 16px;
+        border-radius: 18px;
+        line-height: 1.6;
+        font-size: 0.96rem;
+      }
+
+      .bubble.user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, var(--gold) 0%, var(--gold-soft) 100%);
+        color: #10180c;
+        font-weight: 600;
+      }
+
+      .bubble.assistant {
+        align-self: flex-start;
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .meta {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        color: var(--gold-soft);
+        background: rgba(212, 175, 55, 0.09);
+        border: 1px solid rgba(212, 175, 55, 0.16);
+      }
+
+      .controls {
+        margin-top: 16px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .speak {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 18px 26px;
+        min-width: 220px;
+        font-size: 1rem;
+        font-weight: 800;
+        cursor: pointer;
+        color: #0b160c;
+        background: linear-gradient(135deg, var(--gold) 0%, var(--gold-soft) 100%);
+        box-shadow: 0 16px 32px rgba(212, 175, 55, 0.18);
+        transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+      }
+
+      .speak:hover {
+        transform: translateY(-1px);
+      }
+
+      .speak.recording {
+        background: linear-gradient(135deg, #ff8e8e 0%, #ffd3b0 100%);
+        box-shadow: 0 18px 38px rgba(255, 142, 142, 0.24);
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .details {
+        display: grid;
+        gap: 12px;
+      }
+
+      .detail-card {
+        border-radius: 18px;
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 14px;
+      }
+
+      .detail-card h3 {
+        margin: 0 0 8px;
+        font-size: 0.9rem;
+        color: var(--gold-soft);
+      }
+
+      .detail-card p,
+      .detail-card li {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 0.92rem;
+      }
+
+      .detail-card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .transcript {
+        white-space: pre-wrap;
+      }
+
+      @media (max-width: 820px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .log {
+          min-height: 260px;
+        }
+
+        .speak {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">API-Driven Voice RAG Assistant</p>
+        <h1>Multilingual voice support for your website</h1>
+        <p class="sub">
+          Hold the button to speak. Your audio goes to Groq for transcription, the question is
+          answered with FAISS-powered RAG context, and the final reply is turned into speech with
+          Sarvam AI.
+        </p>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Conversation</h2>
+          <div id="log" class="log"></div>
+          <div class="controls">
+            <button id="recordButton" class="speak" type="button">Hold to Speak</button>
+            <span id="status" class="status">Ready. Press and hold to record.</span>
+          </div>
+        </div>
+
+        <aside class="panel details">
+          <div class="detail-card">
+            <h3>How it works</h3>
+            <ul>
+              <li>Capture mic audio with <code>MediaRecorder</code>.</li>
+              <li>POST the audio file to <code>/chat</code>.</li>
+              <li>Groq ASR transcribes the speech.</li>
+              <li>FAISS retrieves the top 2 context chunks.</li>
+              <li>Groq LLM generates a concise same-language answer.</li>
+              <li>Sarvam TTS returns base64 audio for playback.</li>
+            </ul>
+          </div>
+
+          <div class="detail-card">
+            <h3>Last transcript</h3>
+            <p id="transcriptText" class="transcript">Nothing yet.</p>
+          </div>
+
+          <div class="detail-card">
+            <h3>Retrieved context</h3>
+            <p id="contextText" class="transcript">Context will appear here after a question.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      const logEl = document.getElementById("log");
+      const recordButton = document.getElementById("recordButton");
+      const statusEl = document.getElementById("status");
+      const transcriptTextEl = document.getElementById("transcriptText");
+      const contextTextEl = document.getElementById("contextText");
+
+      let mediaRecorder = null;
+      let mediaStream = null;
+      let audioChunks = [];
+      let isRecording = false;
+      let audioContext = null;
+
+      function addBubble(sender, text, meta = []) {
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${sender}`;
+        bubble.textContent = text;
+
+        if (meta.length && sender === "assistant") {
+          const metaWrap = document.createElement("div");
+          metaWrap.className = "meta";
+          meta.forEach((item) => {
+            const pill = document.createElement("span");
+            pill.className = "pill";
+            pill.textContent = item;
+            metaWrap.appendChild(pill);
+          });
+          bubble.appendChild(metaWrap);
+        }
+
+        logEl.appendChild(bubble);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      async function ensureAudioContext() {
+        if (!audioContext) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioContext = new AudioContextClass();
+        }
+        if (audioContext.state === "suspended") {
+          await audioContext.resume();
+        }
+      }
+
+      async function playReturnedAudio(base64Audio) {
+        await ensureAudioContext();
+        const binary = atob(base64Audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer.slice(0));
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+      }
+
+      async function startRecording() {
+        if (isRecording) return;
+
+        try {
+          await ensureAudioContext();
+          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const preferredMime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : "audio/webm";
+
+          audioChunks = [];
+          mediaRecorder = new MediaRecorder(mediaStream, { mimeType: preferredMime });
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+          mediaRecorder.start();
+          isRecording = true;
+          recordButton.classList.add("recording");
+          recordButton.textContent = "Release to Send";
+          statusEl.textContent = "Recording...";
+        } catch (error) {
+          statusEl.textContent = `Microphone error: ${error.message}`;
+        }
+      }
+
+      async function stopRecording() {
+        if (!isRecording || !mediaRecorder) return;
+
+        mediaRecorder.onstop = async () => {
+          isRecording = false;
+          recordButton.classList.remove("recording");
+          recordButton.textContent = "Hold to Speak";
+          statusEl.textContent = "Processing audio...";
+
+          const mimeType = mediaRecorder.mimeType || "audio/webm";
+          const audioBlob = new Blob(audioChunks, { type: mimeType });
+
+          mediaStream.getTracks().forEach((track) => track.stop());
+
+          const formData = new FormData();
+          formData.append("file", audioBlob, mimeType.includes("wav") ? "voice.wav" : "voice.webm");
+
+          try {
+            const response = await fetch("/chat", {
+              method: "POST",
+              body: formData,
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.detail || "Voice assistant request failed.");
+            }
+
+            transcriptTextEl.textContent = payload.transcript || "No transcript returned.";
+            contextTextEl.textContent = (payload.retrieved_contexts || []).join("\n\n") || "No context returned.";
+
+            addBubble("user", payload.transcript || "Audio message");
+            addBubble("assistant", payload.answer || "No answer returned.", [
+              `Language: ${payload.detected_language || "unknown"}`,
+              `TTS: ${payload.tts_language_code || "unknown"}`,
+            ]);
+
+            if (payload.audio_base64) {
+              statusEl.textContent = "Playing response...";
+              await playReturnedAudio(payload.audio_base64);
+              statusEl.textContent = "Ready for the next question.";
+            } else {
+              statusEl.textContent = "Answer received, but no audio returned.";
+            }
+          } catch (error) {
+            statusEl.textContent = error.message;
+            addBubble("assistant", `Error: ${error.message}`);
+          }
+        };
+
+        mediaRecorder.stop();
+      }
+
+      const startEvents = ["pointerdown", "touchstart", "mousedown"];
+      const stopEvents = ["pointerup", "pointerleave", "touchend", "mouseup"];
+
+      startEvents.forEach((eventName) => {
+        recordButton.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          startRecording();
+        });
+      });
+
+      stopEvents.forEach((eventName) => {
+        recordButton.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          stopRecording();
+        });
+      });
+
+      addBubble(
+        "assistant",
+        "Hold the button and ask something like: How do I rent a tractor? What payment methods are supported? How long does heavy equipment delivery take?"
+      );
+    </script>
+  </body>
+</html>

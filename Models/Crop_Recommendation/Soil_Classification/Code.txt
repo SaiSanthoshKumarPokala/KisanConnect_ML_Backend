@@ -1,0 +1,107 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms, models
+from torch.utils.data import DataLoader
+import os
+
+# 1. Configuration & Hyperparameters
+# Update this path based on how Kaggle mounts the dataset
+DATA_DIR = "/kaggle/input/datasets/organizations/ai4a-lab/comprehensive-soil-classification-datasets/CyAUG-Dataset"
+BATCH_SIZE = 128  # Large batch size to fully utilize both T4 GPUs (15GB VRAM each)
+EPOCHS = 10
+LEARNING_RATE = 0.0001
+
+def main():
+    # 2. Device Setup (Utilizing T4 x2)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    num_gpus = torch.cuda.device_count()
+    print(f"Using {num_gpus} GPUs for training!")
+
+    # 3. Data Augmentation & Loading
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    # Load dataset
+    print("Loading dataset...")
+    dataset = datasets.ImageFolder(DATA_DIR, transform=transform)
+    num_classes = len(dataset.classes)
+    print(f"Found {num_classes} soil classes: {dataset.classes}")
+
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+
+    # 4. Model Architecture (ResNet50)
+    print("Initializing ResNet50...")
+    model = models.resnet50(weights='IMAGENET1K_V2')
+    
+    # Replace the final fully connected layer
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, num_classes)
+
+    # Wrap model in DataParallel to use both T4s, then send to device
+    if num_gpus > 1:
+        model = nn.DataParallel(model)
+    model = model.to(device)
+
+    # 5. Loss & Optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # 6. Training Loop
+    print("Starting training loop...")
+    for epoch in range(EPOCHS):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+
+        for batch_idx, (inputs, labels) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            
+            # Calculate accuracy
+            _, predicted = outputs.max(1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+
+        epoch_loss = running_loss / len(dataloader)
+        epoch_acc = 100. * correct / total
+        print(f"Epoch [{epoch+1}/{EPOCHS}] | Loss: {epoch_loss:.4f} | Accuracy: {epoch_acc:.2f}%")
+
+    # 7. Export for NVIDIA Triton (TorchScript)
+    print("Exporting model for Triton Inference Server...")
+    
+    # Move model back to CPU and remove DataParallel wrapper for clean export
+    model.eval()
+    if isinstance(model, nn.DataParallel):
+        model_export = model.module.to("cpu")
+    else:
+        model_export = model.to("cpu")
+
+    # Create a dummy input tensor matching Triton config (Batch size 1, 3 channels, 224x224)
+    example_input = torch.randn(1, 3, 224, 224)
+
+    # Trace the model
+    try:
+        traced_model = torch.jit.trace(model_export, example_input)
+        save_path = "model.pt"
+        traced_model.save(save_path)
+        print(f"Success! Model saved natively as '{save_path}'")
+        print("You can now download 'model.pt' from the Kaggle output directory.")
+    except Exception as e:
+        print(f"Error during tracing: {e}")
+
+if __name__ == "__main__":
+    main()
